@@ -1,5 +1,7 @@
 # Ignore all python env files
 /env
+# Ignore .vscode
+/.vscode
 # Ignore data files
 /data/raw/*
 /data/processed/*
