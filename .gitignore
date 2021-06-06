@@ -1,2 +1,6 @@
 # Ignore all python env files
 /env
+# Ignore data files
+/data/raw/*
+# Keep txt with data sources
+/data/raw/
