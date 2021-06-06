@@ -2,5 +2,7 @@
 /env
 # Ignore data files
 /data/raw/*
+/data/processed/*
 # Keep txt with data sources
-/data/raw/
+!/data/raw/data_src.md
+!/data/processed/.gitkeep
