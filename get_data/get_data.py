@@ -41,7 +41,12 @@ def unzip(file_loc, extract_loc=None):
     except FileNotFoundError:
         print('Error: File not found')
 
+
 def RData_to_csv(file_loc, extract_loc=None):
+    """
+    Converts RData file to csv format. If extract_loc left empty, extracts to data/processed
+    directory.
+    """
     try:
         # If extraction directory not given, extracted to 'data/processed/file_name'
         if extract_loc==None: 
@@ -60,12 +65,9 @@ def RData_to_csv(file_loc, extract_loc=None):
         for key in data.keys():
             df = data[key]
             csv_loc = extract_loc + '/' + key + '.csv'
-            print(csv_loc)
             df.to_csv(csv_loc)
 
     except FileNotFoundError:
         print('Error: Extraction directory not found')
     except pyreadr.custom_errors.PyreadrError:
         print('Error: Rdata file not found')
-            
-    
