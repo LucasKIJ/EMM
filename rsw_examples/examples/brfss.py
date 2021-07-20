@@ -1,5 +1,5 @@
 import pandas as pd
-import rsw
+from rsw import rsw
 import matplotlib.pyplot as plt
 import numpy as np
 

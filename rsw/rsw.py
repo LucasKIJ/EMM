@@ -26,13 +26,32 @@ def rsw(df, funs, losses, regularizer, lam=1, **kwargs):
         - out: Final induced expected values as a list of numpy arrays.
         - sol: Dictionary of final ADMM variables. Can be ignored.
     """
-    if funs is not None:
+
+
+
+    if funs is None:
+        F = np.array(df).T
+        print(F)
+    if type(funs) is list:
         F = []
         for f in funs:
             F += [df.apply(f, axis=1)]
         F = np.array(F, dtype=float)
-    else:
-        F = np.array(df).T
+    if type(funs) is dict:
+        F = []
+        for f in funs['mean']:
+            F += [df[f]]
+
+        for f in funs['std']:
+            F += [abs(df[f] - df[f].mean())]
+
+        for f in funs['skew']:
+            F += [((df[f] - df[f].mean()) / df[f].std())**3]
+
+        for f in funs['kurtosis']:
+            F += [((df[f] - df[f].mean()) / df[f].std())**4]
+        F = np.array(F, dtype=float)
+
     m, n = F.shape
 
     # remove nans by changing F
