@@ -41,7 +41,11 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+<<<<<<< HEAD
 MANIFEST
 
 # Ignore Notebook cache
 .ipynb_checkpoints/
+=======
+MANIFEST
+>>>>>>> 8ec61977584cacc36a7249fba5198734d12ef87b
