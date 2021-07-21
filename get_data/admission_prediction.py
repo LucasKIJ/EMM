@@ -36,7 +36,9 @@ def create_splits(
     assert sum(ratios) == 1
     stratify_indexes = None
     if stratify:
-        assert "label" in frame.columns, "Function expects a label column if we are stratifying."
+        assert (
+            "label" in frame.columns
+        ), "Function expects a label column if we are stratifying."
         stratify_indexes = frame["label"]
 
     # Perform the first split to get the test data

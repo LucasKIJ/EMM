@@ -10,6 +10,9 @@ from emm.regularizers import *
 import gurobipy as gp
 from gurobipy import GRB
 
+# CVX optimisation
+import cvxpy as cp
+
 ## Admm optimisation
 def _projection_simplex(v, z=1):
     n_features = v.shape[0]
@@ -22,8 +25,20 @@ def _projection_simplex(v, z=1):
     w = np.maximum(v - theta, 0)
     return w
 
-def admm(F, losses, reg, lam, rho=50, maxiter=5000, eps=1e-6, warm_start={}, verbose=False,
-         eps_abs=1e-5, eps_rel=1e-5):
+
+def admm(
+    F,
+    losses,
+    reg,
+    lam,
+    rho=50,
+    maxiter=5000,
+    eps=1e-6,
+    warm_start={},
+    verbose=False,
+    eps_abs=1e-5,
+    eps_rel=1e-5,
+):
     # Get dims of F
     m, n = F.shape
     # Get fims of loss functions
@@ -65,15 +80,11 @@ def admm(F, losses, reg, lam, rho=50, maxiter=5000, eps=1e-6, warm_start={}, ver
     else:
         u = np.zeros(n)
 
-    
-    Q = sparse.bmat([
-        [2 * sparse.eye(n), F.T],
-        [F, -sparse.eye(m)]
-    ])
+    Q = sparse.bmat([[2 * sparse.eye(n), F.T], [F, -sparse.eye(m)]])
     factor = qdldl.Solver(Q)
 
     if verbose:
-        print(u'Iteration     | ||r||/\u03B5_pri | ||s||/\u03B5_dual')
+        print(u"Iteration     | ||r||/\u03B5_pri | ||s||/\u03B5_dual")
 
     w_best = None
     best_objective_value = float("inf")
@@ -81,34 +92,24 @@ def admm(F, losses, reg, lam, rho=50, maxiter=5000, eps=1e-6, warm_start={}, ver
     for k in range(maxiter):
         ct_cum = 0
         for l in losses:
-            f[ct_cum:ct_cum + l.m] = l.prox(F[ct_cum:ct_cum + l.m] @ w -
-                                            y[ct_cum:ct_cum + l.m], 1 / rho)
+            f[ct_cum : ct_cum + l.m] = l.prox(
+                F[ct_cum : ct_cum + l.m] @ w - y[ct_cum : ct_cum + l.m], 1 / rho
+            )
             ct_cum += l.m
 
         w_tilde = reg.prox(w - z, lam / rho)
         w_bar = _projection_simplex(w - u)
 
-        rhs = np.append(
-            F.T @ (f + y) + w_tilde + z + w_bar + u,
-            np.zeros(m)
-        )
+        rhs = np.append(F.T @ (f + y) + w_tilde + z + w_bar + u, np.zeros(m))
         w_new = factor.solve(rhs)[:n]
-        s = rho * np.concatenate([
-            F @ w_new - f,
-            w_new - w,
-            w_new - w
-        ])
+        s = rho * np.concatenate([F @ w_new - f, w_new - w, w_new - w])
         w = w_new
 
         y = y + f - F @ w
         z = z + w_tilde - w
         u = u + w_bar - w
 
-        r = np.concatenate([
-            f - F @ w,
-            w_tilde - w,
-            w_bar - w
-        ])
+        r = np.concatenate([f - F @ w, w_tilde - w, w_bar - w])
 
         p = m + 2 * n
         Ax_k_norm = np.linalg.norm(np.concatenate([f, w_tilde, w_bar]))
@@ -121,19 +122,23 @@ def admm(F, losses, reg, lam, rho=50, maxiter=5000, eps=1e-6, warm_start={}, ver
         s_norm = np.linalg.norm(s)
         r_norm = np.linalg.norm(r)
         if verbose and k % 50 == 0:
-            print('It %03d / %03d | %8.5e | %8.5e' %
-                  (k, maxiter, r_norm / eps_pri, s_norm / eps_dual))
+            print(
+                "It %03d / %03d | %8.5e | %8.5e"
+                % (k, maxiter, r_norm / eps_pri, s_norm / eps_dual)
+            )
 
         if isinstance(reg, BooleanRegularizer):
             ct_cum = 0
-            objective = 0.
+            objective = 0.0
             for l in losses:
-                objective += l.evaluate(F[ct_cum:ct_cum + l.m] @ w_tilde)
+                objective += l.evaluate(F[ct_cum : ct_cum + l.m] @ w_tilde)
                 ct_cum += l.m
             if objective < best_objective_value:
                 if verbose:
-                    print("Found better objective value: %3.5f -> %3.5f" %
-                          (best_objective_value, objective))
+                    print(
+                        "Found better objective value: %3.5f -> %3.5f"
+                        % (best_objective_value, objective)
+                    )
                 best_objective_value = objective
                 w_best = w_tilde
 
@@ -151,15 +156,16 @@ def admm(F, losses, reg, lam, rho=50, maxiter=5000, eps=1e-6, warm_start={}, ver
         "y": y,
         "z": z,
         "u": u,
-        "w_best": w_best
+        "w_best": w_best,
     }
+
 
 ## Gurobi ##
 def gurobi(F, losses, reg, lam):
     m, n = F.shape
     # Desired marginal values
     fdes = np.array([l.fdes for l in losses]).flatten()
-    
+
     # Create model
     md = gp.Model("emm1")
 
@@ -167,13 +173,10 @@ def gurobi(F, losses, reg, lam):
     md.Params.LogToConsole = 0
 
     # Create variables
-    w = md.addVars(n,lb=0, ub=1,vtype=GRB.CONTINUOUS, name='x')
-    wlogw = md.addVars(n,lb=-gp.GRB.INFINITY,
-                                vtype=GRB.CONTINUOUS, name='wlogw')
+    w = md.addVars(n, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="x")
+    wlogw = md.addVars(n, lb=-gp.GRB.INFINITY, vtype=GRB.CONTINUOUS, name="wlogw")
     # Marginals
-    f = md.addVars(m, vtype=GRB.CONTINUOUS, name = 'f')
-
-
+    f = md.addVars(m, vtype=GRB.CONTINUOUS, name="f")
 
     # Create constraints
     # sum(w) == 1
@@ -181,33 +184,47 @@ def gurobi(F, losses, reg, lam):
     # w >= 0 for all w
     md.addConstrs((w[i] >= 0 for i in range(n)), "c1")
     # f = Fw
-    md.addConstrs((f[i] == gp.quicksum(F[i,j] * w[j] for j in range(n)) for i in range(m)))
+    md.addConstrs(
+        (f[i] == gp.quicksum(F[i, j] * w[j] for j in range(n)) for i in range(m))
+    )
 
+    # Set up entropy regulariser
     if reg.__class__ == EntropyRegularizer().__class__:
         # Create x-points and y-points for approximation of y = x*log(x)
-        xs = [0.01*i for i in range(101)]
-        ys = [p*np.log(p) if p != 0 else 0 for p in xs]
+        xs = [0.01 * i for i in range(101)]
+        ys = [p * np.log(p) if p != 0 else 0 for p in xs]
 
         # Regulariser
         for i in range(n):
-            md.addGenConstrPWL(w[i],wlogw[i],xs,ys, name='wlogw')
+            md.addGenConstrPWL(w[i], wlogw[i], xs, ys, name="wlogw")
         regu = -gp.quicksum(wlogw[i] for i in range(n))
 
+    # Zero regulariser
     if reg.__class__ == ZeroRegularizer().__class__:
         regu = 0
-    
+
     # Squared loss objective
-    loss = gp.quicksum((f[i]-fdes[i])*(f[i]-fdes[i]) 
-                                    for i in range(m))
+    loss = gp.quicksum((f[i] - fdes[i]) * (f[i] - fdes[i]) for i in range(m))
     md.setObjective(loss + lam * regu, GRB.MINIMIZE)
 
     # # Optimize model
     md.optimize()
     # for v in md.getVars():
     #     print('%s %g' % (v.varName, v.x))
-    print('Obj: %g' % md.objVal)
+    print("Obj: %g" % md.objVal)
 
     return np.array([w[i].x for i in range(n)])
+
+
+def cvx(F, losses, reg, lam):
+    w = cp.Variable(n)
+
+    cp.Problem(
+        cp.Minimize(0.5 * cp.sum_squares(F[: m // 2] @ w - fdes1) - cp.sum(cp.entr(w))),
+        [cp.sum(w) == 1, w >= 0, cp.max(cp.abs(F[m // 2 :] @ w - fdes2)) <= 1],
+    ).solve(solver=cp.MOSEK)
+    return 0
+
 
 if __name__ == "__main__":
     np.random.seed(1)
@@ -219,14 +236,19 @@ if __name__ == "__main__":
     F = np.random.randn(m, n)
     fdes1 = np.random.randn(m // 2)
     fdes2 = np.random.randn(m // 2)
-    losses = [LeastSquaresLoss(fdes1), InequalityLoss(
-        fdes2, -1 * np.ones(m // 2), 1 * np.ones(m // 2))]
+    losses = [
+        LeastSquaresLoss(fdes1),
+        InequalityLoss(fdes2, -1 * np.ones(m // 2), 1 * np.ones(m // 2)),
+    ]
     reg = EntropyRegularizer()
 
     sol = admm(F, losses, reg, 1, verbose=True)
 
     import cvxpy as cp
+
     w = cp.Variable(n)
-    cp.Problem(cp.Minimize(.5 * cp.sum_squares(F[:m // 2] @ w - fdes1) - cp.sum(cp.entr(w))),
-               [cp.sum(w) == 1, w >= 0, cp.max(cp.abs(F[m // 2:] @ w - fdes2)) <= 1]).solve(solver=cp.MOSEK)
+    cp.Problem(
+        cp.Minimize(0.5 * cp.sum_squares(F[: m // 2] @ w - fdes1) - cp.sum(cp.entr(w))),
+        [cp.sum(w) == 1, w >= 0, cp.max(cp.abs(F[m // 2 :] @ w - fdes2)) <= 1],
+    ).solve(solver=cp.MOSEK)
     np.testing.assert_allclose(w.value, sol["w"], atol=1e-3)
