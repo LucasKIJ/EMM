@@ -4,8 +4,8 @@ import cvxpy as cp
 import numpy as np
 from scipy import sparse
 import time
-from emm.solvers import admm, gurobi
-from emm.regularizers import ZeroRegularizer
+from emm.solvers import *
+from emm.regularizers import *
 
 
 def emm(
@@ -27,7 +27,7 @@ def emm(
         - losses: Dist of losses, each one of emm.EqualityLoss, emm.InequalityLoss, rsw.LeastSquaresLoss,
             or emm.KLLoss()
         - optimizer: Optimiser used to find weights, current choices are
-            'admm',
+            'admm', 'cvx'.
         - regularizer: Weights regularizer, emm.ZeroRegularizer,
             emm.EntropyRegularizer, or emm.KLRegularizer, emm.BooleanRegularizer
         - lam (optional): Regularization hyper-parameter (default=1).
@@ -38,6 +38,8 @@ def emm(
         - out: Final induced expected values (weighted marginals)
             as a list of numpy arrays.
     """
+    if type(corpus) == np.ndarray:
+        corpus = pd.DataFrame(corpus)
 
     if marginals is None:
         # Just match means
@@ -78,8 +80,8 @@ def emm(
                         )
                         ** 4
                     ]
-                # else:
-                #    F += [corpus[feature].apply(fun,axis=1)]
+                else:
+                    F += [corpus[feature].apply(fun, axis=1)]
 
         F = np.array(F, dtype=float)
 
@@ -107,8 +109,29 @@ def emm(
         for m in [l.m for l in losses]:
             out += [means[ct : ct + m]]
             ct += m
-        return sol["w_best"], out, sol
+        return sol["w_best"], out
 
-    if optimizer == "gurobi":
-        w = gurobi(F, losses, regularizer, lam)
-        return w, 0, 0
+    if optimizer == "cvx":
+        F_sparse = sparse.csc_matrix(F)
+        tic = time.time()
+        w = cvx(F_sparse, losses, regularizer, lam)
+        toc = time.time()
+
+        if kwargs.get("verbose", False):
+            print("CVX took %3.5f seconds" % (toc - tic))
+
+        if w == None:
+            print("Convergence Error: CVX did not converge.")
+            raise
+
+        out = []
+        means = F @ w
+        ct = 0
+        for m in [l.m for l in losses]:
+            out += [means[ct : ct + m]]
+            ct += m
+        return w, out
+
+    # if optimizer == "gurobi":
+    #     w = gurobi(F, losses, regularizer, lam)
+    #     return w, 0, 0

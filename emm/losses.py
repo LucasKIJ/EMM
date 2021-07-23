@@ -14,6 +14,9 @@ class EqualityLoss:
     def prox(self, f, lam):
         return self.fdes
 
+    def cvx(self, f, w):
+        return [cp.max(cp.abs(f @ w - self.fdes)) <= 1e-10], "c"
+
 
 class InequalityLoss:
     def __init__(self, fdes, lower, upper):
@@ -27,6 +30,15 @@ class InequalityLoss:
 
     def prox(self, f, lam):
         return np.clip(f, self.fdes + self.lower, self.fdes + self.upper)
+
+    def cvx(self, f, w):
+        if (self.upper == -self.lower).all():
+            return [cp.max(cp.abs(f @ w - self.fdes)) <= self.upper], "c"
+        else:
+            return [
+                cp.max(f @ w - self.fdes) <= self.upper,
+                cp.min(f @ w - self.fdes) >= self.lower,
+            ], "c"
 
 
 class LeastSquaresLoss:
@@ -47,6 +59,9 @@ class LeastSquaresLoss:
     def evaluate(self, f):
         return np.sum(np.square(self.diag_weight * (f - self.fdes)))
 
+    def cvx(self, f, w):
+        return 0.5 * cp.sum_squares(f @ w - self.fdes), "o"
+
 
 def _entropy_prox(f, lam):
     return lam * np.real(lambertw(np.exp(f / lam - 1) / lam, tol=1e-10))
@@ -65,6 +80,9 @@ class KLLoss:
 
     def evaluate(self, f):
         return self.scale * np.sum(kl_div(f, self.fdes))
+
+    def cvx(self, f, w):
+        return self.scale * cp.sum(cp.kl_div(f, self.fdes)), "o"
 
 
 if __name__ == "__main__":

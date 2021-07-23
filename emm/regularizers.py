@@ -10,6 +10,9 @@ class ZeroRegularizer:
     def prox(self, w, lam):
         return w
 
+    def cvx(self, w):
+        return 0, "o"
+
 
 class EntropyRegularizer:
     def __init__(self, limit=None):
@@ -23,6 +26,9 @@ class EntropyRegularizer:
             what = np.clip(what, 1 / (self.limit * w.size), self.limit / w.size)
         return what
 
+    def cvx(self,w):
+        return -cp.sum(cp.entr(w)), "o"
+
 
 class KLRegularizer:
     def __init__(self, prior, w_min=0, w_max=float("inf")):
@@ -32,18 +38,8 @@ class KLRegularizer:
     def prox(self, w, lam):
         return self.entropy_reg.prox(w + lam * np.log(self.prior), lam)
 
-
-class CardinalityRegularizer:
-    def __init__(self, k):
-        raise NotImplementedError
-        self.k = k
-
-    def prox(self, w, lam):
-        out = np.copy(w)
-        idx = np.argsort(w)[: -self.k]
-        out[idx] = 0.0
-        return out
-
+    def cvx(self,w):
+        return cp.sum(cp.kl_div(w, prior)), "o"
 
 class BooleanRegularizer:
     def __init__(self, k):
@@ -54,6 +50,12 @@ class BooleanRegularizer:
         new_arr = np.zeros(len(w))
         new_arr[idx_sort[-self.k :]] = 1.0 / self.k
         return new_arr
+
+    def cvx(self, w):
+        # Outside the capabilities of cvx since this is
+        # a non convex constraint. Possible to implement using
+        # mixed integer programming
+        raise NotImplementedError
 
 
 if __name__ == "__main__":
