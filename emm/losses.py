@@ -1,7 +1,9 @@
 import cvxpy as cp
 import numpy as np
+import pandas as pd
 from scipy.special import lambertw, kl_div
 from numbers import Number
+from scipy import stats
 
 
 class EqualityLoss:
@@ -42,11 +44,12 @@ class InequalityLoss:
 
 
 class LeastSquaresLoss:
-    def __init__(self, fdes, diag_weight=None):
+    def __init__(self, fdes, diag_weight=None, scale=1.0):
         if isinstance(fdes, Number):
             fdes = np.array([fdes])
         self.fdes = fdes
         self.m = fdes.size
+        self.scale = scale
         if diag_weight is None:
             diag_weight = 1.0
         self.diag_weight = diag_weight
@@ -57,10 +60,10 @@ class LeastSquaresLoss:
         )
 
     def evaluate(self, f):
-        return np.sum(np.square(self.diag_weight * (f - self.fdes)))
+        return self.scale * np.sum(np.square(self.diag_weight * (f - self.fdes)))
 
     def cvx(self, f, w):
-        return 0.5 * cp.sum_squares(f @ w - self.fdes), "o"
+        return self.scale * cp.sum_squares(f @ w - self.fdes), "o"
 
 
 def _entropy_prox(f, lam):
@@ -68,7 +71,7 @@ def _entropy_prox(f, lam):
 
 
 class KLLoss:
-    def __init__(self, fdes, scale=1):
+    def __init__(self, fdes, scale=1, bins=10):
         if isinstance(fdes, Number):
             fdes = np.array([fdes])
         self.fdes = fdes
@@ -82,7 +85,26 @@ class KLLoss:
         return self.scale * np.sum(kl_div(f, self.fdes))
 
     def cvx(self, f, w):
-        return self.scale * cp.sum(cp.kl_div(f, self.fdes)), "o"
+        return self.scale * cp.sum(cp.kl_div(f @ w, self.fdes)), "o"
+
+
+class CorpusKLLoss:
+    def __init__(self, fdes, scale=1, bins='auto'):
+        if isinstance(fdes, Number):
+            fdes = np.array([fdes])
+        self.fdes = fdes
+        self.m = fdes.size
+        self.scale = scale
+        self.bins = bins
+
+    def prox(self, f, lam):
+        return _entropy_prox(f + lam * self.scale * np.log(self.fdes), lam * self.scale)
+
+    def evaluate(self, f):
+        return self.scale * np.sum(kl_div(f, self.fdes))
+
+    def cvx(self, f, w):
+        return self.scale * cp.sum(cp.kl_div(f @ w, self.fdes)), "o"
 
 
 if __name__ == "__main__":

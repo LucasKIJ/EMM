@@ -38,33 +38,23 @@ def emm(
         - out: Final induced expected values (weighted marginals)
             as a list of numpy arrays.
     """
-    if type(corpus) == np.ndarray:
-        corpus = pd.DataFrame(corpus)
-
-    if marginals is None:
-        # Just match means
-        F = np.array(corpus).T
-    if type(marginals) is list:
-        # If list is used, apply each function in list
-        # to every instance of every feature
-        F = []
-        for f in marginals:
-            F += [corpus.apply(f, axis=1)]
-        F = np.array(F, dtype=float)
-
+    
+    
+    
     if type(marginals) is dict:
         # If dictionary is used, each key represents a feature.
         # Value for that key are the functions to be apply to
         # that feature.
         F = []
+        
         for feature in marginals:
             for fun in marginals[feature]:
                 # Special case commands
-                if fun == "mean":
+                if str(fun) == "mean":
                     F += [corpus[feature]]
-                if fun == "std":
+                elif str(fun) == "std":
                     F += [abs(corpus[feature] - corpus[feature].mean())]
-                if fun == "skew":
+                elif str(fun) == "skew":
                     F += [
                         (
                             (corpus[feature] - corpus[feature].mean())
@@ -72,7 +62,7 @@ def emm(
                         )
                         ** 3
                     ]
-                if fun == "kurtosis":
+                elif str(fun) == "kurtosis":
                     F += [
                         (
                             (corpus[feature] - corpus[feature].mean())
@@ -81,6 +71,8 @@ def emm(
                         ** 4
                     ]
                 else:
+                    print(feature)
+                    print(fun)
                     F += [corpus[feature].apply(fun, axis=1)]
 
         F = np.array(F, dtype=float)
@@ -112,7 +104,8 @@ def emm(
         return sol["w_best"], out
 
     if optimizer == "cvx":
-        F_sparse = sparse.csc_matrix(F)
+        # F_sparse = sparse.csc_matrix(F)
+        F_sparse = F
         tic = time.time()
         w = cvx(F_sparse, losses, regularizer, lam)
         toc = time.time()
@@ -120,7 +113,7 @@ def emm(
         if kwargs.get("verbose", False):
             print("CVX took %3.5f seconds" % (toc - tic))
 
-        if w == None:
+        if w.any() == None:
             print("Convergence Error: CVX did not converge.")
             raise
 

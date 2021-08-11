@@ -9,8 +9,11 @@ from src import generate
 
 
 def load_dataframes():
-    """This should return the dataframes as processed and saved by get_data."""
-    pass
+    """
+    Enter desired dataframe name. 
+    Returns frame_stat, frame_corpus, frame_test
+    """
+    
 
 
 def evaluate(train_data, test_data):

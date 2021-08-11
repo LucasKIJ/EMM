@@ -10,7 +10,7 @@ class ZeroRegularizer:
     def prox(self, w, lam):
         return w
 
-    def cvx(self, w):
+    def cvx(self, w, lam):
         return 0, "o"
 
 
@@ -26,8 +26,8 @@ class EntropyRegularizer:
             what = np.clip(what, 1 / (self.limit * w.size), self.limit / w.size)
         return what
 
-    def cvx(self,w):
-        return -cp.sum(cp.entr(w)), "o"
+    def cvx(self,w, lam):
+        return -lam * cp.sum(cp.entr(w)), "o"
 
 
 class KLRegularizer:
@@ -38,8 +38,8 @@ class KLRegularizer:
     def prox(self, w, lam):
         return self.entropy_reg.prox(w + lam * np.log(self.prior), lam)
 
-    def cvx(self,w):
-        return cp.sum(cp.kl_div(w, prior)), "o"
+    def cvx(self,w, lam):
+        return lam *  cp.sum(cp.kl_div(w, prior)), "o"
 
 class BooleanRegularizer:
     def __init__(self, k):

@@ -18,4 +18,12 @@ def marginal_statistics_from_dataframe(frame):
     It should group by the label column and compute the mean and standard deviation (or potentially some other method)
     conditional on the label being 0 or 1. These results should be stored in some usable format.
     """
+    X = frame.drop(columns="label")
+    y = frame["label"]
+
+    mean = frame.groupby("label").mean()
+    std = frame.groupby("label").std()
+    skew = frame.groupby("label").skew()
+    kurt = frame.groupby("label").apply(pd.DataFrame.kurt)
+
     pass

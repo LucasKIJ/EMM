@@ -165,10 +165,9 @@ def cvx(F, losses, reg, lam=1):
     objective = 0
     # Initialise constraints
     constrs = [cp.sum(w) == 1, w >= 0]
-
     ct_cum = 0
     for l in losses:
-        f = F[ct_cum : ct_cum + l.m]
+        f = F[ct_cum : (ct_cum + l.m), :]
         ct_cum += l.m
         expr, type_expr = l.cvx(f, w)
         if type_expr == "o":
@@ -176,11 +175,11 @@ def cvx(F, losses, reg, lam=1):
         if type_expr == "c":
             constrs += expr
 
-    expr, type_expr = reg.cvx(w)
+    expr, type_expr = reg.cvx(w, lam)
     if type_expr == "o":
-        objective += lam * expr
+        objective += expr
     if type_expr == "c":
-        constrs += lam * expr
+        constrs += expr
 
     cp.Problem(cp.Minimize(objective), constrs).solve()
 
