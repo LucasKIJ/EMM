@@ -1,3 +1,4 @@
+from numpy.lib.shape_base import expand_dims
 import pandas as pd
 import numpy as np
 import cvxpy as cp
@@ -5,15 +6,14 @@ import numpy as np
 from scipy import sparse
 import time
 from emm.solvers import *
-from emm.regularizers import *
+import emm
 
 
-def emm(
+def EMM(
     corpus,
     marginals,
-    losses,
-    regularizer=ZeroRegularizer,
-    optimizer="admm",
+    regularizer=emm.regularizers.ZeroRegularizer(),
+    optimizer="cvx",
     lam=1,
     **kwargs
 ):
@@ -21,7 +21,7 @@ def emm(
 
     Arguments:
         - corpus: Pandas dataframe of corpus dataset
-        - funs: Dictionary i.e. {feature : [funs]} of which functions to apply
+        - funs: Dictionary i.e. {feature : {'fun' : [funs], 'loss' : [lossfun]}} of which functions to apply
             to each feature or list i.e [fun1, fun2,...] of functions to apply
             to every feature of the corpus dataset.
         - losses: Dist of losses, each one of emm.EqualityLoss, emm.InequalityLoss, rsw.LeastSquaresLoss,
@@ -38,44 +38,59 @@ def emm(
         - out: Final induced expected values (weighted marginals)
             as a list of numpy arrays.
     """
-    
-    
-    
+
     if type(marginals) is dict:
         # If dictionary is used, each key represents a feature.
         # Value for that key are the functions to be apply to
         # that feature.
         F = []
-        
+        losses = []
+        target_mean = {}
+        target_std = {}
         for feature in marginals:
-            for fun in marginals[feature]:
+            for count, fun in enumerate(marginals[feature]["fun"]):
+                
+                loss = marginals[feature]["loss"][count]
+                
                 # Special case commands
                 if str(fun) == "mean":
-                    F += [corpus[feature]]
-                elif str(fun) == "std":
-                    F += [abs(corpus[feature] - corpus[feature].mean())]
+                    F += [np.array(corpus[feature])]
+                    target_mean[feature] = loss.fdes
+                elif str(fun) == "var":
+                    F += [np.array((corpus[feature] - target_mean[feature])**2)]
+                    target_std[feature] = loss.fdes
                 elif str(fun) == "skew":
                     F += [
-                        (
-                            (corpus[feature] - corpus[feature].mean())
-                            / corpus[feature].std()
+                        np.array(
+                            (
+                                (corpus[feature] - target_mean[feature])
+                                / target_std[feature]
+                            )
+                            ** 3
                         )
-                        ** 3
                     ]
                 elif str(fun) == "kurtosis":
                     F += [
-                        (
-                            (corpus[feature] - corpus[feature].mean())
-                            / corpus[feature].std()
+                        np.array(
+                            (
+                                (corpus[feature] - target_mean[feature])
+                                / target_std[feature]
+                            )
+                            ** 4
                         )
-                        ** 4
                     ]
                 else:
-                    print(feature)
-                    print(fun)
-                    F += [corpus[feature].apply(fun, axis=1)]
+                    F += [np.array(fun(corpus[feature]))]
 
-        F = np.array(F, dtype=float)
+                losses.append(loss)
+
+    else:
+        Exception("Error: Incorrect format used")
+
+    for i in range(len(F)):
+        if F[i].ndim == 1:
+            F[i] = np.expand_dims(F[i], axis=1)
+    F = np.concatenate(F, axis=1, dtype=float).T
 
     m, n = F.shape
 
@@ -128,3 +143,24 @@ def emm(
     # if optimizer == "gurobi":
     #     w = gurobi(F, losses, regularizer, lam)
     #     return w, 0, 0
+
+
+def generate_synth(corpus, margs, **kwargs):
+    optimizer = kwargs.get("optimizer", "cvx")
+    verbose = kwargs.get("verbose", False)
+    rw_corpus = pd.DataFrame()
+    label_count = len(margs.keys())
+    for label in margs.keys():
+        regularizer = margs[label].pop(
+            "regularizer", {"reg": emm.regularizers.ZeroRegularizer, "lam": 1}
+        )
+        reg = regularizer["reg"]
+        lam = regularizer["lam"]
+
+        w, _ = EMM(corpus, margs[label], reg, optimizer, lam, verbose=verbose)
+        df = corpus.copy()
+        df["Outcome"] = label
+        df["weights"] = w / label_count
+        rw_corpus = pd.concat([rw_corpus, df], axis=0, ignore_index=True)
+
+    return rw_corpus

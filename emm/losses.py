@@ -4,6 +4,7 @@ import pandas as pd
 from scipy.special import lambertw, kl_div
 from numbers import Number
 from scipy import stats
+from emm.utils import onehot_hist
 
 
 class EqualityLoss:
@@ -89,13 +90,26 @@ class KLLoss:
 
 
 class CorpusKLLoss:
-    def __init__(self, fdes, scale=1, bins='auto'):
-        if isinstance(fdes, Number):
-            fdes = np.array([fdes])
-        self.fdes = fdes
-        self.m = fdes.size
+    def __init__(self, mean=None, std=None, scale=1, bins='auto'):
         self.scale = scale
         self.bins = bins
+        self.mean = mean
+        self.std = std
+    
+    def fun(self, data):
+        if self.mean == None:
+            self.mean = data.mean()
+        if self.std == None:
+            self.std = data.std()
+
+        F, self.bins = onehot_hist(data, self.bins)
+
+        target = (data - data.mean() ) * (self.std / data.std()) + self.mean 
+        hist, _ = onehot_hist(target, bins=self.bins)
+        self.fdes = np.array(hist).T @ (np.ones(target.shape[0]) / target.shape[0])
+        self.m = self.fdes.size
+
+        return F
 
     def prox(self, f, lam):
         return _entropy_prox(f + lam * self.scale * np.log(self.fdes), lam * self.scale)

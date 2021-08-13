@@ -30,7 +30,7 @@ def admm(
     F,
     losses,
     reg,
-    lam,
+    lam=1,
     rho=50,
     maxiter=5000,
     eps=1e-6,
@@ -94,7 +94,7 @@ def admm(
             )
             ct_cum += l.m
 
-        w_tilde = reg.prox(w - z, lam / rho)
+        w_tilde = reg.prox(w - z, lam = (lam / rho))
         w_bar = _projection_simplex(w - u)
 
         rhs = np.append(F.T @ (f + y) + w_tilde + z + w_bar + u, np.zeros(m))
@@ -174,7 +174,6 @@ def cvx(F, losses, reg, lam=1):
             objective += expr
         if type_expr == "c":
             constrs += expr
-
     expr, type_expr = reg.cvx(w, lam)
     if type_expr == "o":
         objective += expr

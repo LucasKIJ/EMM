@@ -4,16 +4,22 @@ import scipy as sp
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
+from scipy.spatial import distance
+import emm
 
 
 def compute_probs(data, bins="auto"):
-    if "weights" in data.columns:
-        w = data["weight"]
-    else:
-        w = None
 
-    bins = np.histogram_bin_edges(data, bins=bins, weights=w)
-    h, e = np.histogram(data, bins=bins)
+    if not isinstance(data, pd.Series):
+        args = {"weights": np.array(data["weights"])}
+        data = np.array(data.drop(columns=["weights"]), ndmin=0)
+        data = data.flatten()
+    else:
+        args = {}
+        data = np.array(data,ndmin=1)
+
+    bins = np.histogram_bin_edges(data, bins=bins)
+    h, e = np.histogram(data, bins=bins, **args)
     p = h / data.shape[0]
     # Return bin edges and probs
     return e, p
@@ -34,9 +40,8 @@ def kl_divergence(p, q):
     return np.sum(sp.special.kl_div(p, q))
 
 
-def js_divergence(p, q):
-    m = (1.0 / 2.0) * (p + q)
-    return (1.0 / 2.0) * kl_divergence(p, m) + (1.0 / 2.0) * kl_divergence(q, m)
+def js_distance(p, q):
+    return distance.jensenshannon(p, q)
 
 
 def compute_kl_divergence(original_sample, weighted_sample, bins=10):
@@ -53,18 +58,17 @@ def compute_kl_divergence(original_sample, weighted_sample, bins=10):
     return kl_divergence(p, q)
 
 
-def compute_js_divergence(original_sample, weighted_sample, n_bins=10):
+def compute_js_distance(target, weighted, bins="auto"):
     """
     Computes the JS Divergence using the support
     intersection between two different samples
     """
-    e, p = compute_probs(original_sample, n=n_bins)
-    _, q = compute_probs(weighted_sample, n=e)
-
-    list_of_tuples = support_intersection(p, q)
-    p, q = get_probs(list_of_tuples)
-
-    return js_divergence(p, q)
+    total_js = 0
+    for feature in target.drop(columns="Outcome").columns:
+        e, p = compute_probs(target[feature], bins=bins)
+        _, q = compute_probs(weighted[[feature, "weights"]], bins=e)
+        total_js += js_distance(p, q)
+    return total_js
 
 
 def compare_model(
@@ -218,6 +222,30 @@ def classifier_metric(
     )
 
     return scores
+
+
+def multiple_models(target, corpus, margs, param_grid, test_size=0.2, **kwargs):
+    rws = []
+    js = []
+    metrics = []
+    bins = kwargs.pop("bins", "auto")
+    verbose = kwargs.get("verbose", False)
+    if type(param_grid) != list:
+        param_grid = [param_grid]
+
+    for marg in margs:
+        rw = emm.reweighting.generate_synth(corpus, marg, verbose=verbose)
+        rws += [rw]
+        js += [compute_js_distance(target, rw, bins=bins)]
+        metric = []
+        for params in param_grid:
+            metric += [classifier_metric(target, rw, params, **kwargs)]
+        metrics += metric
+
+    # if len(param_grid) == 1:
+    #     classifier_metric = metrics[0]
+
+    return rws, js, metrics
 
 
 ############################################################################################################

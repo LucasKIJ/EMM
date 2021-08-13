@@ -38,7 +38,7 @@ class KLRegularizer:
     def prox(self, w, lam):
         return self.entropy_reg.prox(w + lam * np.log(self.prior), lam)
 
-    def cvx(self,w, lam):
+    def cvx(self, w, lam):
         return lam *  cp.sum(cp.kl_div(w, prior)), "o"
 
 class BooleanRegularizer:
@@ -51,7 +51,7 @@ class BooleanRegularizer:
         new_arr[idx_sort[-self.k :]] = 1.0 / self.k
         return new_arr
 
-    def cvx(self, w):
+    def cvx(self, w, lam):
         # Outside the capabilities of cvx since this is
         # a non convex constraint. Possible to implement using
         # mixed integer programming
