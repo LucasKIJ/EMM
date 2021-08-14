@@ -4,6 +4,7 @@ import scipy as sp
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator, TransformerMixin
 from scipy.spatial import distance
 import emm
 
@@ -16,7 +17,7 @@ def compute_probs(data, bins="auto"):
         data = data.flatten()
     else:
         args = {}
-        data = np.array(data,ndmin=1)
+        data = np.array(data, ndmin=1)
 
     bins = np.histogram_bin_edges(data, bins=bins)
     h, e = np.histogram(data, bins=bins, **args)
@@ -63,12 +64,21 @@ def compute_js_distance(target, weighted, bins="auto"):
     Computes the JS Divergence using the support
     intersection between two different samples
     """
+    js_s = {}
     total_js = 0
-    for feature in target.drop(columns="Outcome").columns:
-        e, p = compute_probs(target[feature], bins=bins)
-        _, q = compute_probs(weighted[[feature, "weights"]], bins=e)
-        total_js += js_distance(p, q)
-    return total_js
+    weighted["weights"] = weighted["weights"] * weighted["Outcome"].nunique()
+    for outcome in target["Outcome"].unique():
+        for feature in target.drop(columns="Outcome").columns:
+
+            e, p = compute_probs(
+                target[target["Outcome"] == outcome][feature], bins=bins
+            )
+            _, q = compute_probs(
+                weighted[weighted["Outcome"] == outcome][[feature, "weights"]], bins=e
+            )
+            total_js += js_distance(p, q)
+        js_s[outcome] = total_js
+    return js_s
 
 
 def compare_model(
@@ -78,26 +88,26 @@ def compare_model(
     y_target_test,
     X_weighted_test,
     y_weighted_test,
-    weights_test,
+    classifier,
     metrics=[sk.metrics.accuracy_score],
-):
-    scores = {}
+):  
+    scores = []
     RR_pred = target_model.predict(X_target_test)
     RS_pred = target_model.predict(X_weighted_test)
     SS_pred = weighted_model.predict(X_weighted_test)
     SR_pred = weighted_model.predict(X_target_test)
-
+    weights_test = X_weighted_test[:,0]
     for i, metric in enumerate(metrics):
         RR_score = metric(y_target_test, RR_pred)
         RS_score = metric(y_weighted_test, RS_pred, sample_weight=weights_test)
         SS_score = metric(y_weighted_test, SS_pred, sample_weight=weights_test)
         SR_score = metric(y_target_test, SR_pred)
-        scores[metric.__name__] = {
+        scores.append({metric.__name__: type(classifier[0]).__name__,
             "RR": RR_score,
             "RS": RS_score,
             "SS": SS_score,
             "SR": SR_score,
-        }
+        })
 
     return scores
 
@@ -105,26 +115,28 @@ def compare_model(
 def train_test_splits_create(target_data, weighted_data, test_size, label):
 
     X_target = target_data.drop(columns=label)
+    X_target.insert(0, "weights", np.ones(X_target.shape[0]) / X_target.shape[0])
     y_target = target_data[label]
 
     X_target_train, X_target_test, y_target_train, y_target_test = train_test_split(
-        X_target, y_target, test_size=test_size
+        np.array(X_target), np.array(y_target), test_size=test_size,
     )
 
     # Training data from weighted corpus
     X_weighted = weighted_data.drop(columns=label)
+    # shift column 'Name' to first position
+    first_column = X_weighted.pop("weights")
+
+    # insert column using insert(position,column_name,
+    # first_column) function
+    X_weighted.insert(0, "weights", first_column)
     y_weighted = weighted_data[label]
     (
         X_weighted_train,
         X_weighted_test,
         y_weighted_train,
         y_weighted_test,
-    ) = train_test_split(X_weighted, y_weighted, test_size=test_size)
-
-    weights_train = X_weighted_train["weights"]
-    weights_test = X_weighted_test["weights"]
-    X_weighted_train = X_weighted_train.drop(columns="weights")
-    X_weighted_test = X_weighted_test.drop(columns="weights")
+    ) = train_test_split(np.array(X_weighted), np.array(y_weighted), test_size=test_size)
 
     return (
         X_target_train,
@@ -133,10 +145,8 @@ def train_test_splits_create(target_data, weighted_data, test_size, label):
         y_target_test,
         X_weighted_train,
         y_weighted_train,
-        weights_train,
         X_weighted_test,
         y_weighted_test,
-        weights_test,
     )
 
 
@@ -155,6 +165,15 @@ def print_cv_results(best_clf, data_name=""):
     )
 
 
+# customized transformer
+class WeightRemover(TransformerMixin, BaseEstimator):
+    def fit(self, X, y=None, **fit_params):
+        return self
+
+    def transform(self, X, y=None, **fit_params):
+        return X[:, 1:]
+
+
 def classifier_metric(
     target_data, weighted_data, param_grid, test_size=0.2, label="Outcome", **kwargs
 ):
@@ -166,270 +185,82 @@ def classifier_metric(
         y_target_test,
         X_weighted_train,
         y_weighted_train,
-        weights_train,
         X_weighted_test,
         y_weighted_test,
-        weights_test,
     ) = train_test_splits_create(target_data, weighted_data, test_size, label)
 
-    classifier = param_grid["classifier"]
-    pipe = Pipeline([("classifier", classifier[0])])
+    scoring = kwargs.get("scoring", sk.metrics.accuracy_score)
+    def weight_remover_scorer(estimator, X, y):
+        y_pred = estimator.predict(X)
+        w = X[:, 0]
+        return scoring(y, y_pred, sample_weight=w)
 
+    classifier = param_grid["classifier"]
+    pipe = Pipeline([("remove_weight", WeightRemover()), ("classifier", classifier[0])])
     cv = kwargs.get("cv", 5)
     verbose = kwargs.get("verbose", False)
-    scoring = kwargs.get("scoring", None)
+
+
     target_clf = sk.model_selection.GridSearchCV(
         pipe,
         param_grid=[param_grid],
         cv=cv,
         verbose=verbose,
         n_jobs=-1,
-        scoring=scoring,
+        scoring=weight_remover_scorer,
     )
+    target_clf = target_clf
+    target_clf.fit(X_target_train, y_target_train)
+    
 
-    # weighted_clf = sk.model_selection.GridSearchCV(
-    #     pipe,
-    #     param_grid=[param_grid],
-    #     cv=cv,
-    #     verbose=verbose,
-    #     n_jobs=-1,
-    #     scoring=scoring,
-    # )
-
-    best_target_clf = target_clf.fit(X_target_train, y_target_train)
-    best_weighted_clf = best_target_clf.best_params_["classifier"]
-    best_weighted_clf.fit(
-        X_weighted_train, y_weighted_train, sample_weight=weights_train
+    pipe = Pipeline([("remove_weight", WeightRemover()), ("classifier", classifier[0])])
+    weighted_clf = sk.model_selection.GridSearchCV(
+        pipe,
+        param_grid=[param_grid],
+        cv=cv,
+        verbose=verbose,
+        n_jobs=-1,
+        scoring=weight_remover_scorer,
     )
-
-    # argw = {pipe.steps[-1][0] + "__sample_weight": weights_train}
-    # best_weighted_clf = weighted_clf.fit(
-    #     X_weighted_train, y_weighted_train_frame, **argw
-    # )
+    
+    weighted_clf.fit(np.array(X_weighted_train), y_weighted_train)
 
     if verbose:
-        print_cv_results(best_target_clf, "Target")
-        # print_cv_results(best_weighted_clf, "Weighted")
+        print_cv_results(target_clf, "Target")
+        print_cv_results(weighted_clf, "Weighted")
 
     scores = compare_model(
-        best_target_clf.best_estimator_,
-        best_weighted_clf,
+        target_clf.best_estimator_,
+        weighted_clf.best_estimator_,
         X_target_test,
         y_target_test,
         X_weighted_test,
         y_weighted_test,
-        weights_test,
+        classifier
     )
 
     return scores
 
 
-def multiple_models(target, corpus, margs, param_grid, test_size=0.2, **kwargs):
+def multiple_models(target, corpus, margs, param_grid, test_size = 0.2, **kwargs):
     rws = []
     js = []
     metrics = []
     bins = kwargs.pop("bins", "auto")
-    verbose = kwargs.get("verbose", False)
     if type(param_grid) != list:
         param_grid = [param_grid]
+    if type(margs) != list:
+        margs = [margs]
 
     for marg in margs:
-        rw = emm.reweighting.generate_synth(corpus, marg, verbose=verbose)
+        rw = emm.reweighting.generate_synth(corpus, marg, **kwargs)
         rws += [rw]
         js += [compute_js_distance(target, rw, bins=bins)]
         metric = []
         for params in param_grid:
-            metric += [classifier_metric(target, rw, params, **kwargs)]
+            metric += [classifier_metric(target, rw, params, test_size=test_size, **kwargs)]
         metrics += metric
-
-    # if len(param_grid) == 1:
-    #     classifier_metric = metrics[0]
 
     return rws, js, metrics
 
 
-############################################################################################################
-# def cross_val_scores_weighted(model, X, y, weights, cv, metrics):
-#     kf = KFold(n_splits=cv)
-#     kf.get_n_splits(X)
-#     scores = [[] for metric in metrics]
-#     for train_index, test_index in kf.split(X):
-#         model_clone = sk.base.clone(model)
-#         X_train, X_test = X[train_index], X[test_index]
-#         y_train, y_test = y[train_index], y[test_index]
-#         weights_train, weights_test = weights[train_index], weights[test_index]
-#         model_clone.fit(X_train, y_train, sample_weight=weights_train)
-#         y_pred = model_clone.predict(X_test)
-#         for i, metric in enumerate(metrics):
-#             score = metric(y_test, y_pred, sample_weight=weights_test)
-#             scores[i].append(score)
-#     return np.array(scores)
-
-
-# # function for fitting trees of various depths on the training data using cross-validation
-# def run_cross_validation_on_trees(
-#     X, y, weights, tree_depths, cv, metrics, verbose=False
-# ):
-#     X = np.array(X)
-#     y = np.array(y)
-
-#     # If no weights given, allocate even weighting
-#     if weights is None:
-#         verb = "Target"
-#         weights = np.ones(X.shape[0]) / X.shape[0]
-#     else:
-#         verb = "Weighted"
-#         weights = np.array(weights)
-#     cv_scores_std = []
-#     cv_scores_mean = []
-#     for depth in tree_depths:
-#         model = DecisionTreeClassifier(max_depth=depth)
-#         cv_scores = cross_val_scores_weighted(model, X, y, weights, cv, metrics)
-#         cv_scores_mean.append(cv_scores.mean())
-#         cv_scores_std.append(cv_scores.std())
-#     cv_scores_mean = np.array(cv_scores_mean)
-#     cv_scores_std = np.array(cv_scores_std)
-#     idx_max = cv_scores_mean.argmax()
-#     best_tree_depth = tree_depths[idx_max]
-#     best_tree_cv_score = cv_scores_mean[idx_max]
-#     best_tree_cv_score_std = cv_scores_std[idx_max]
-#     if verbose:
-#         print(
-#             "{} data: The depth-{} tree achieves the best mean cross-validation accuracy {} +/- {}% on training dataset".format(
-#                 verb,
-#                 best_tree_depth,
-#                 round(best_tree_cv_score * 100, 5),
-#                 round(best_tree_cv_score_std * 100, 5),
-#             )
-#         )
-
-#     return best_tree_depth
-
-
-# def compute_decision_tree_metric(
-#     target_data, weighted_data, tree_depths, test_size=0.2, label="Outcome", **kwargs
-# ):
-#     (
-#         X_target_train,
-#         y_target_train,
-#         X_target_test,
-#         y_target_test,
-#         X_weighted_train,
-#         y_weighted_train,
-#         weights_train,
-#         X_weighted_test,
-#         y_weighted_test,
-#         weights_test,
-#     ) = train_test_splits_create(target_data, weighted_data, test_size, label)
-
-#     cv = kwargs.get("cv", 5)
-#     metrics = kwargs.get("metrics", [sk.metrics.accuracy_score])
-#     verbose = kwargs.get("verbose", False)
-
-#     best_target_depth = run_cross_validation_on_trees(
-#         X_target_train, y_target_train, None, tree_depths, cv, metrics, verbose
-#     )
-#     best_weighted_depth = run_cross_validation_on_trees(
-#         X_weighted_train,
-#         y_weighted_train,
-#         weights_train,
-#         tree_depths,
-#         cv,
-#         metrics,
-#         verbose,
-#     )
-
-#     target_model = DecisionTreeClassifier(max_depth=best_target_depth).fit(
-#         X_target_train, y_target_train
-#     )
-#     weighted_model = DecisionTreeClassifier(max_depth=best_weighted_depth).fit(
-#         X_weighted_train, y_weighted_train, sample_weight=weights_train
-#     )
-
-#     scores = compare_model(
-#         target_model,
-#         weighted_model,
-#         X_target_test,
-#         y_target_test,
-#         X_weighted_test,
-#         y_weighted_test,
-#         weights_test,
-#     )
-#     return scores
-
-
-# def run_cross_validation_on_trees(
-#     X, y, weights, tree_depths, cv, metrics, verbose=False
-# ):
-#     X = np.array(X)
-#     y = np.array(y)
-
-#     # If no weights given, allocate even weighting
-#     if weights is None:
-#         verb = "Target"
-#         weights = np.ones(X.shape[0]) / X.shape[0]
-#     else:
-#         verb = "Weighted"
-#         weights = np.array(weights)
-#     cv_scores_std = []
-#     cv_scores_mean = []
-#     for depth in tree_depths:
-#         model = DecisionTreeClassifier(max_depth=depth)
-#         cv_scores = cross_val_scores_weighted(model, X, y, weights, cv, metrics)
-#         cv_scores_mean.append(cv_scores.mean())
-#         cv_scores_std.append(cv_scores.std())
-#     cv_scores_mean = np.array(cv_scores_mean)
-#     cv_scores_std = np.array(cv_scores_std)
-#     idx_max = cv_scores_mean.argmax()
-#     best_tree_depth = tree_depths[idx_max]
-#     best_tree_cv_score = cv_scores_mean[idx_max]
-#     best_tree_cv_score_std = cv_scores_std[idx_max]
-#     if verbose:
-#         print(
-#             "{} data: The depth-{} tree achieves the best mean cross-validation accuracy {} +/- {}% on training dataset".format(
-#                 verb,
-#                 best_tree_depth,
-#                 round(best_tree_cv_score * 100, 5),
-#                 round(best_tree_cv_score_std * 100, 5),
-#             )
-#         )
-
-#     return best_tree_depth
-
-# def run_cross_validation_on_trees(
-#     X, y, weights, tree_depths, cv, metrics, verbose=False
-# ):
-#     X = np.array(X)
-#     y = np.array(y)
-
-#     # If no weights given, allocate even weighting
-#     if weights is None:
-#         verb = "Target"
-#         weights = np.ones(X.shape[0]) / X.shape[0]
-#     else:
-#         verb = "Weighted"
-#         weights = np.array(weights)
-#     cv_scores_std = []
-#     cv_scores_mean = []
-#     for depth in tree_depths:
-#         model = DecisionTreeClassifier(max_depth=depth)
-#         cv_scores = cross_val_scores_weighted(model, X, y, weights, cv, metrics)
-#         cv_scores_mean.append(cv_scores.mean())
-#         cv_scores_std.append(cv_scores.std())
-#     cv_scores_mean = np.array(cv_scores_mean)
-#     cv_scores_std = np.array(cv_scores_std)
-#     idx_max = cv_scores_mean.argmax()
-#     best_tree_depth = tree_depths[idx_max]
-#     best_tree_cv_score = cv_scores_mean[idx_max]
-#     best_tree_cv_score_std = cv_scores_std[idx_max]
-#     if verbose:
-#         print(
-#             "{} data: The depth-{} tree achieves the best mean cross-validation accuracy {} +/- {}% on training dataset".format(
-#                 verb,
-#                 best_tree_depth,
-#                 round(best_tree_cv_score * 100, 5),
-#                 round(best_tree_cv_score_std * 100, 5),
-#             )
-#         )
-
-#     return best_tree_depth

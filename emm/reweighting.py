@@ -7,6 +7,28 @@ from scipy import sparse
 import time
 from emm.solvers import *
 import emm
+from sklearn.preprocessing import StandardScaler
+
+
+class marginal:
+    def __init__(self, feature, fun, loss, standardize=False, **kwargs):
+        self.fun = fun
+        self.feature = feature
+        self.loss = loss
+        self.standardize = standardize
+        self.scaler = kwargs.pop("scaler", StandardScaler())
+
+    def scale(self, data):
+        if self.standardize:
+            data = self.scaler.fit_transform(data.reshape(-1,1)).flatten()
+            if self.fun == "var":
+                self.loss.fdes = self.loss.fdes / self.scaler.var_
+            else:
+                self.loss.fdes = self.scaler.transform(
+                    self.loss.fdes.reshape(-1, 1)
+                ).flatten()
+                
+        return data        
 
 
 def EMM(
@@ -39,6 +61,35 @@ def EMM(
             as a list of numpy arrays.
     """
 
+    if type(marginals) is list:
+
+        F = []
+        losses = []
+        target_mean = {}
+        target_std = {}
+        for marginal in marginals:
+
+            loss = marginal.loss
+            fun = marginal.fun
+            feature = marginal.feature
+            data = np.array(corpus[feature])
+            data = marginal.scale(data)
+            # Special case commands
+            if fun == "mean": 
+                F += [data]
+                target_mean[feature] = loss.fdes
+            elif fun == "var":
+                F += [(data - target_mean[feature]) ** 2]
+                target_std[feature] = loss.fdes
+            elif fun == "skew":
+                F += [((data - target_mean[feature]) / target_std[feature]) ** 3]
+            elif fun == "kurtosis":
+                F += [((data - target_mean[feature]) / target_std[feature]) ** 4]
+            else:
+                F += [fun(data)]
+
+            losses.append(loss)
+
     if type(marginals) is dict:
         # If dictionary is used, each key represents a feature.
         # Value for that key are the functions to be apply to
@@ -49,15 +100,15 @@ def EMM(
         target_std = {}
         for feature in marginals:
             for count, fun in enumerate(marginals[feature]["fun"]):
-                
+
                 loss = marginals[feature]["loss"][count]
-                
+
                 # Special case commands
                 if str(fun) == "mean":
                     F += [np.array(corpus[feature])]
                     target_mean[feature] = loss.fdes
                 elif str(fun) == "var":
-                    F += [np.array((corpus[feature] - target_mean[feature])**2)]
+                    F += [np.array((corpus[feature] - target_mean[feature]) ** 2)]
                     target_std[feature] = loss.fdes
                 elif str(fun) == "skew":
                     F += [
@@ -128,9 +179,8 @@ def EMM(
         if kwargs.get("verbose", False):
             print("CVX took %3.5f seconds" % (toc - tic))
 
-        if w.any() == None:
-            print("Convergence Error: CVX did not converge.")
-            raise
+        if w is None:
+            raise Exception("Convergence Error: CVX did not converge.")
 
         out = []
         means = F @ w
@@ -150,17 +200,27 @@ def generate_synth(corpus, margs, **kwargs):
     verbose = kwargs.get("verbose", False)
     rw_corpus = pd.DataFrame()
     label_count = len(margs.keys())
+
     for label in margs.keys():
-        regularizer = margs[label].pop(
-            "regularizer", {"reg": emm.regularizers.ZeroRegularizer, "lam": 1}
-        )
+        if type(margs[label]) is dict:
+            regularizer = margs[label].pop(
+                "regularizer", {"reg": emm.regularizers.ZeroRegularizer, "lam": 1}
+            )
+        else:
+            regularizer =  {"reg": emm.regularizers.ZeroRegularizer, "lam": 1}
         reg = regularizer["reg"]
         lam = regularizer["lam"]
+
+        reg = kwargs.get('regularizer', reg)
+        lam = kwargs.get('lam', lam)
+
+
+
 
         w, _ = EMM(corpus, margs[label], reg, optimizer, lam, verbose=verbose)
         df = corpus.copy()
         df["Outcome"] = label
         df["weights"] = w / label_count
-        rw_corpus = pd.concat([rw_corpus, df], axis=0, ignore_index=True)
+        rw_corpus= pd.concat([rw_corpus, df], axis=0, ignore_index=True)
 
     return rw_corpus

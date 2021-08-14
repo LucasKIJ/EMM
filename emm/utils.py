@@ -21,3 +21,8 @@ def weighted_hist(data, weights, bins="auto", **kwargs):
         **kwargs
     )
 
+def weighted_mean(data,weights):
+    return data.T @ weights
+
+def weighted_var(data, weights):
+    return ((data-data.T @ weights)**2).T @ weights
