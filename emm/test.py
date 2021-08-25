@@ -1,4 +1,5 @@
 from __future__ import division
+import collections
 
 import numpy as np
 from sklearn.datasets import load_iris
@@ -10,7 +11,7 @@ import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
 import scipy as sp
-import emm
+
 
 # customized scorer
 
@@ -18,7 +19,7 @@ import emm
 def weight_remover_scorer(estimator, X, y):
 
     y_pred = estimator.predict(X)
-    w = X[:, 0]
+    w = X[:, -1]
     return accuracy_score(y, y_pred, sample_weight=w)
 
 
@@ -28,13 +29,15 @@ class WeightRemover(TransformerMixin, BaseEstimator):
         return self
 
     def transform(self, X, y=None, **fit_params):
-        return X[:, 1:]
+        return X[:, :-1]
 
 
 # in your main function
 
-# if __name__ == "__main__":
-if True:
+if __name__ == "__main__":
+    import emm
+    import sklearn as sk
+
     # Generate example data
     m = 10000
     # Target distribution
@@ -62,6 +65,10 @@ if True:
     sample_weight = np.ones(len(X)) / len(X)
     sample_weight = np.random.rand(len(X))
     sample_weight = sample_weight / sample_weight.sum()
+
+    histLoss0 = emm.losses.CorpusKLLoss(mean=mu0[0], std=sig0[0],scale=2)
+    histLoss1 = emm.losses.CorpusKLLoss(mean=mu1[0], std=sig1[0], scale=2)
+
 
     lam = 0
     margsKL = {
@@ -94,28 +101,37 @@ if True:
         ],
     }
 
-    margs = [margsKL, margsLS]
+    margs =  margsLS
 
-    emm.reweighting.generate_synth(
-        corpus, margs, regularizers=emm.regularizers.EntropyRegularizer(), lam=lam
+
+    rwc = emm.reweighting.generate_synth(
+        corpus, margs, regularizers=emm.regularizers.EntropyRegularizer(), lam=1
     )
 
-    model = RandomForestClassifier(
-        n_estimators=5,
-        criterion="entropy",
-        warm_start=False,
-        n_jobs=1,
-    )
+    # model = RandomForestClassifier(
+    #     n_estimators=5,
+    #     criterion="entropy",
+    #     warm_start=False,
+    #     n_jobs=1,
+    # )
+
+    #model = sk.linear_model.LogisticRegression()
+    model = sk.tree.DecisionTreeClassifier(max_depth=2)
 
     pipe = Pipeline([("remove_weight", WeightRemover()), ("model", model)])
-    search_params = {"max_features": [1]}
+    search_params = {}
     params_grid = {"model__" + k: v for k, v in search_params.items()}
-    X = np.c_[sample_weight, X]
+    X = np.array(rwc.drop(columns='Outcome'))
+    y = np.array(rwc[['Outcome']])
+    X_train, X_test, y_train, y_test = sk.model_selection.train_test_split(X,y)
 
-    grid = GridSearchCV(pipe, params_grid, cv=5, scoring=weight_remover_scorer)
-    grid.fit(X, y)
+    grid = GridSearchCV(pipe, params_grid, cv=10, scoring=weight_remover_scorer)
+    
+    grid.fit(X_train, y_train, model__sample_weight=X_train[:,1])
 
     print(
         "This is the best out-of-sample score using GridSearchCV: %.6f."
-        % grid.best_score_
+        % grid.score(X_train,y_train)
     )
+
+    print(grid.score(X_test,y_test))
