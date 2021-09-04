@@ -35,21 +35,12 @@ class KLRegularizer:
         self.prior = prior
         self.entropy_reg = EntropyRegularizer(w_min, w_max)
 
-    def prox(self, w, lam):
-        return self.entropy_reg.prox(w + lam * np.log(self.prior), lam)
-
     def cvx(self, w, lam):
         return lam *  cp.sum(cp.kl_div(w, prior)), "o"
 
 class BooleanRegularizer:
     def __init__(self, k):
         self.k = k
-
-    def prox(self, w, lam):
-        idx_sort = np.argsort(w)
-        new_arr = np.zeros(len(w))
-        new_arr[idx_sort[-self.k :]] = 1.0 / self.k
-        return new_arr
 
     def cvx(self, w, lam):
         # Outside the capabilities of cvx since this is
@@ -71,8 +62,6 @@ if __name__ == "__main__":
     cp.Problem(
         cp.Minimize(-cp.sum(cp.entr(what)) + 1 / (2 * lam) * cp.sum_squares(what - w))
     ).solve()
-    np.testing.assert_allclose(what.value, entropy_reg.prox(w, lam), atol=1e-4)
-
     kl_reg = KLRegularizer(prior)
     what = cp.Variable(10)
     cp.Problem(
@@ -82,4 +71,3 @@ if __name__ == "__main__":
             + 1 / (2 * lam) * cp.sum_squares(what - w)
         )
     ).solve()
-    np.testing.assert_allclose(what.value, kl_reg.prox(w, lam), atol=1e-4)
