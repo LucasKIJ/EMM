@@ -8,7 +8,7 @@ At its core, this is achieved by solving the following optimisation problem:
 
 <img src="https://github.com/LucasKIJ/EMM/blob/main/assets/readme_opti.png" alt="drawing" width="400"/>
 
-where <img src="https://render.githubusercontent.com/render/math?math=\mathbf f"> is the summary statistics of the corpus, <img src="https://render.githubusercontent.com/render/math?math=\hat{\mathbf f}"> are the target summary statistics, and <img src="https://render.githubusercontent.com/render/math?math=\mathbf w"> is the vector of weights.
+where <img src="https://render.githubusercontent.com/render/math?math=\mathbf f"> is the summary statistics of the corpus, <img src="https://render.githubusercontent.com/render/math?math=\hat{\mathbf f}"> are the target summary statistics, and <img src="https://render.githubusercontent.com/render/math?math=\mathbf w"> is the vector of weights. The function <img src="https://render.githubusercontent.com/render/math?math=\ell(\cdot,\cdot)"> is the loss function which can be chosen by the user, the standard choice is least squares loss, given as <img src="https://render.githubusercontent.com/render/math?math=\ell(\mathbf f, \hat{\mathbf f}) = (\mathbf f - \hat{\mathbf f})^2"> . The function <img src="https://render.githubusercontent.com/render/math?math=\r(\cdot,\cdot)"> is the weight regulariser function which can be chosen by the user, the standard choice is negative entropy, given as <img src="https://render.githubusercontent.com/render/math?math=\r(\mathbf w) = \sum_{i=1}^N w_i \log w_i"> . 
 
 ### Paper
 This repository contains all the code used to create the results from the Oxford MMSC Master thesis:
