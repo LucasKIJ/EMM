@@ -8,7 +8,7 @@ At its core, this is achieved by solving the following optimisation problem:
 
 <img src="https://github.com/LucasKIJ/EMM/blob/main/assets/readme_opti.png" alt="drawing" width="400"/>
 
-where <img src="https://render.githubusercontent.com/render/math?math=\mathbf f"> is the summary statistics of the corpus, $\hat{\mathbf f}$ are the target summary statistics, and $\mathbf w$ is the vector of weights.
+where <img src="https://render.githubusercontent.com/render/math?math=\mathbf f"> is the summary statistics of the corpus, <img src="https://render.githubusercontent.com/render/math?math=\hat{\mathbf f}"> are the target summary statistics, and <img src="https://render.githubusercontent.com/render/math?math=\mathbf w"> is the vector of weights.
 
 
 
