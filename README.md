@@ -10,7 +10,26 @@ At its core, this is achieved by solving the following optimisation problem:
 
 where <img src="https://render.githubusercontent.com/render/math?math=\mathbf f"> is the summary statistics of the corpus, <img src="https://render.githubusercontent.com/render/math?math=\hat{\mathbf f}"> are the target summary statistics, and <img src="https://render.githubusercontent.com/render/math?math=\mathbf w"> is the vector of weights.
 
+### Paper
+This repository contains all the code used to create the results from the Oxford MMSC Master thesis:
+[Generating Synthetic Data using Entropic Marginal Matching](https://github.com/LucasKIJ/EMM/blob/main/assets/LucasJevtic_dissertation.pdf)
 
+### Installation
+Setup the Environment by installing requirements and running the ```setup.py```
+- ```pip install -r requirement.txt```
+- ```pip setup.py install```
 
-### Pre-processing
-Pre-processing includes procedures that involve transforming raw data into a format that is ready to be used in the optimisation stage.  Processes such as data importation, conversion, standardisation, one-hot encoding of categorical variables, and handling of missing data are needed to create a corpus dataset that can be used by the EMM optimisation function.
+### Examples
+Many examples can be found in the notebooks folder.
+
+### Citing
+If you use EMM in your research, please consider citing the work using the following bibtex:
+```
+@misc{jevtic2021emm,
+  title={Generating Sythetic Data using Entropic Marginal Matching},
+  author={Lucas Jevtic},
+  month={September},
+  year={2021},
+  howpublished={\texttt{https://github.com/LucasKIJ/EMM/blob/main/assets/LucasJevtic_dissertation.pdf}}
+}
+```
