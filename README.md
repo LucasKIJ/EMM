@@ -5,13 +5,7 @@ The aim of the library is to facilitate the seamless use of EMM with common Pyth
 EMM is an extension to existing survey-weighting-techniques designed for generating realistic synthetic data using class-conditional summary statistics.  To create the synthetic data,  weights are allocated to samples of a large dataset thatis  representative  of  some  general  population,  referred  to  as  the corpus dataset.  The weights are chosen such that the statistics of the syntheticdata match target summary statistics, while maintaining a desirable distribution of the weights.  The method is formulated as a convex optimisation problem, balancing two objectives:  matching of target statistics andregulating  the  entropy  of  the  weights’  distribution.   Hence,  the  methodhas  been  calledEntropic  Marginal  Matching  (EMM).
 
 At its core, this is achieved by solving the following optimisation problem:
-```math
-\begin{align}
-  \min_{\mathbf w} &\quad \ell(\mathbf f, \hat{\mathbf f}) + \lambda r(w) \\
-  s.t. & \quad \sum_{i=1}^N w_i = 1 \\
-       & \quad w_i \geq 0, \; \; \forall i 
-\end{align}
-```
+![alt text](https://github.com/LucasKIJ/EMM/blob/main/assets/readme_opti.png)
 where $f$ is the summary statistics of the corpus, $\hat{\mathbf f}$ are the target summary statistics, and $\mathbf w$ is the vector of weights.
 
 
