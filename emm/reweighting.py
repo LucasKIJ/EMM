@@ -60,7 +60,7 @@ def EMM(
         - out: Final induced expected values (weighted marginals)
             as a list of numpy arrays.
     """
-    
+
     if type(marginals) is list:
 
         F = []
@@ -80,7 +80,7 @@ def EMM(
                 target_mean[feature] = loss.fdes
             elif fun == "var":
                 F += [(data - target_mean[feature]) ** 2]
-                target_std[feature] = loss.fdes**(1/2)
+                target_std[feature] = loss.fdes ** (1 / 2)
             elif fun == "skew":
                 F += [((data - target_mean[feature]) / target_std[feature]) ** 3]
             elif fun == "kurtosis":
@@ -167,3 +167,13 @@ def generate_synth(corpus, margs, **kwargs):
         rw_corpus = pd.concat([rw_corpus, df], axis=0, ignore_index=True)
 
     return rw_corpus
+
+
+if False:
+    marginals = {
+        0: [marginal(feature="height", fun="mean", loss=LeastSquaresLoss(185))],
+        1: [marginal(feature="height", fun="mean", loss=LeastSquaresLoss(185))],
+    }
+
+    data = generate_synth(corpus, marginals)
+

@@ -13,7 +13,7 @@ import emm
 def compute_probs(data, bins="auto"):
     """
     Computes probability of data point falling in a given bins
-    
+
     Arguments:
         data : pandas series or 2-d dataframe with "weights" column
         bins : number of bins to use in histogram approximation
@@ -43,11 +43,11 @@ def compute_probs(data, bins="auto"):
 def support_intersection(p, q):
     """
     Get overlapping parts of distribution
-    
-    Arguments: 
+
+    Arguments:
         p : 1-d array of probabilites
         q : 1-d array of probabilites
-    
+
     Returns:
         sup_int : tuple of overlapping probabilities
     """
@@ -59,7 +59,7 @@ def support_intersection(p, q):
 def get_probs(list_of_tuples):
     """
     Gets probabilties from tuples
-    
+
     Arguments:
         list_of_tuples : list of tuples with overlapping probabilities
 
@@ -160,7 +160,7 @@ def compare_model(
     y_target_test,
     X_weighted_test,
     y_weighted_test,
-    classifier = "Unknown",
+    classifier="Unknown",
     metrics=[sk.metrics.accuracy_score],
 ):
 
@@ -188,10 +188,10 @@ def compare_model(
 
     for i, metric in enumerate(metrics):
         if metric == sk.metrics.roc_auc_score:
-            RR_pred = target_model.predict_proba(X_target_test)[:,1]
-            RS_pred = target_model.predict_proba(X_weighted_test)[:,1]
-            SS_pred = weighted_model.predict_proba(X_weighted_test)[:,1]
-            SR_pred = weighted_model.predict_proba(X_target_test)[:,1]
+            RR_pred = target_model.predict_proba(X_target_test)[:, 1]
+            RS_pred = target_model.predict_proba(X_weighted_test)[:, 1]
+            SS_pred = weighted_model.predict_proba(X_weighted_test)[:, 1]
+            SR_pred = weighted_model.predict_proba(X_target_test)[:, 1]
         else:
             RR_pred = target_model.predict(X_target_test)
             RS_pred = target_model.predict(X_weighted_test)
@@ -307,7 +307,7 @@ def classifier_metric(
     def weight_remover_scorer(estimator, X, y):
         if scoring == sk.metrics.roc_auc_score:
             print("test")
-            y_pred = estimator.predict_proba(X)[:,1]
+            y_pred = estimator.predict_proba(X)[:, 1]
         else:
             y_pred = estimator.predict(X)
         w = X[:, 0]
@@ -354,10 +354,7 @@ def classifier_metric(
         print_cv_results(target_clf, "Target")
         print_cv_results(weighted_clf, "Weighted")
 
-
-
-
-    metrics = kwargs.pop('metrics', [sk.metrics.accuracy_score])
+    metrics = kwargs.pop("metrics", [sk.metrics.accuracy_score])
     scores = compare_model(
         target_clf.best_estimator_,
         weighted_clf.best_estimator_,
@@ -366,7 +363,7 @@ def classifier_metric(
         X_weighted_test,
         y_weighted_test,
         classifier,
-        metrics=metrics
+        metrics=metrics,
     )
 
     if return_models:
@@ -403,6 +400,7 @@ def multiple_models(target, corpus, margs, param_grid, test_size=0.2, **kwargs):
         metrics = metrics[0]
 
     return rws, js, metrics
+
 
 if __name__ == "__main__":
     import emm
@@ -442,9 +440,8 @@ if __name__ == "__main__":
     sample_weight = np.random.rand(len(X))
     sample_weight = sample_weight / sample_weight.sum()
 
-    histLoss0 = emm.losses.CorpusKLLoss(mean=mu0[0], std=sig0[0],scale=2)
+    histLoss0 = emm.losses.CorpusKLLoss(mean=mu0[0], std=sig0[0], scale=2)
     histLoss1 = emm.losses.CorpusKLLoss(mean=mu1[0], std=sig1[0], scale=2)
-
 
     lam = 0
     margsKL = {
@@ -477,8 +474,7 @@ if __name__ == "__main__":
         ],
     }
 
-    margs =  margsLS
-
+    margs = margsLS
 
     rwc = emm.reweighting.generate_synth(
         corpus, margs, regularizers=emm.regularizers.EntropyRegularizer(), lam=1
@@ -491,23 +487,25 @@ if __name__ == "__main__":
     #     n_jobs=1,
     # )
 
-    #model = sk.linear_model.LogisticRegression()
+    # model = sk.linear_model.LogisticRegression()
     model = sk.tree.DecisionTreeClassifier(max_depth=2)
 
     pipe = Pipeline([("remove_weight", WeightRemover()), ("model", model)])
     search_params = {}
     params_grid = {"model__" + k: v for k, v in search_params.items()}
-    X = np.array(rwc.drop(columns='Outcome'))
-    y = np.array(rwc[['Outcome']])
-    X_train, X_test, y_train, y_test = sk.model_selection.train_test_split(X,y)
+    X = np.array(rwc.drop(columns="Outcome"))
+    y = np.array(rwc[["Outcome"]])
+    X_train, X_test, y_train, y_test = sk.model_selection.train_test_split(X, y)
 
-    grid = sk.model_selection.GridSearchCV(pipe, params_grid, cv=10, scoring=weight_remover_scorer)
-    
-    grid.fit(X_train, y_train, model__sample_weight=X_train[:,1])
+    grid = sk.model_selection.GridSearchCV(
+        pipe, params_grid, cv=10, scoring=weight_remover_scorer
+    )
+
+    grid.fit(X_train, y_train, model__sample_weight=X_train[:, 1])
 
     print(
         "This is the best out-of-sample score using GridSearchCV: %.6f."
-        % grid.score(X_train,y_train)
+        % grid.score(X_train, y_train)
     )
 
-    print(grid.score(X_test,y_test))
+    print(grid.score(X_test, y_test))
