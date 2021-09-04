@@ -4,8 +4,8 @@
 /.vscode
 /.vs
 # Ignore data files
-assets/*
-assets/*
+assets/data/raw/*
+assets/data/processed/*
 # Keep txt with data sources
 !/assets/data/raw/data_src.md
 !/assets/data/processed/.gitkeep
